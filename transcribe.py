@@ -2,9 +2,11 @@ import requests
 import whisper
 from datetime import datetime
 import time
+import io
 import os
 import pytz
 import torch
+import numpy as np
 import ffmpeg
 from threading import Thread
 from queue import Queue
@@ -27,6 +29,7 @@ class AudioStreamTranscriber:
             raise ValueError("Missing required environment variables: STREAM_URL, STREAM_USERNAME, or STREAM_PASSWORD")
 
         # Configure torch for optimal performance
+        torch._utils._load_global_deps = lambda obj, *args, **kwargs: obj
         torch.set_grad_enabled(False)  # Disable gradient computation
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True  # Enable cudnn autotuner
@@ -78,7 +81,7 @@ class AudioStreamTranscriber:
             )
 
             stdout, stderr = process.communicate(input=mp3_data)
-            return torch.frombuffer(stdout, dtype=torch.float32).clone()
+            return np.frombuffer(stdout, dtype=np.float32).copy()
 
         except Exception as e:
             print(f"[{self.get_formatted_time()}] Decoding error: {e}")
@@ -86,18 +89,18 @@ class AudioStreamTranscriber:
 
     def process_audio_chunk(self, audio_data):
         try:
-            audio_tensor = self.decode_mp3_to_pcm(audio_data)
+            pcm_data = self.decode_mp3_to_pcm(audio_data)
 
-            if audio_tensor is not None and audio_tensor.numel() > 0:
-                # Move tensor to correct device
-                audio_tensor = audio_tensor.to(self.device)
+            if pcm_data is not None and len(pcm_data) > 0:
+                # Convert to tensor once instead of letting Whisper do it
+                audio_tensor = torch.from_numpy(pcm_data).to(self.device)
 
                 result = self.model.transcribe(
                     audio_tensor,
                     language="en",
                     task="transcribe",
                     initial_prompt="This is police and emergency dispatch radio communication.",
-                    no_speech_threshold=0.6
+                    no_speech_threshold=0.6  # Adjust this based on your needs
                 )
 
                 return result["text"]
@@ -122,10 +125,7 @@ class AudioStreamTranscriber:
                 if transcription:
                     self.write_transcription(transcription)
                 self.audio_queue.task_done()
-            except Queue.Empty:
-                continue
-            except Exception as e:
-                print(f"[{self.get_formatted_time()}] Worker error: {e}")
+            except Exception:
                 continue
 
     def write_transcription(self, transcription):
@@ -141,7 +141,6 @@ class AudioStreamTranscriber:
                 print(f"[{self.get_formatted_time()}] Error writing transcription: {e}")
 
     def stream_and_transcribe(self):
-        session = None
         try:
             print(f"[{self.get_formatted_time()}] Starting streaming and transcription service")
             print(f"[{self.get_formatted_time()}] Transcriptions will be saved in: {os.path.abspath('transcribe.txt')}")
@@ -172,10 +171,12 @@ class AudioStreamTranscriber:
                     buffer.extend(chunk)
 
                     if len(buffer) >= self.buffer_size:
+                        # Add to processing queue if there's room
                         try:
                             self.audio_queue.put(bytes(buffer), timeout=1)
-                        except Queue.Full:
+                        except Exception:
                             print(f"[{self.get_formatted_time()}] Queue full, skipping chunk")
+
                         buffer.clear()
 
         except KeyboardInterrupt:
@@ -184,8 +185,7 @@ class AudioStreamTranscriber:
             print(f"[{self.get_formatted_time()}] Streaming error: {e}")
         finally:
             self.running = False
-            if session:
-                session.close()
+            session.close()
             if 'worker_thread' in locals():
                 worker_thread.join(timeout=5)
 
