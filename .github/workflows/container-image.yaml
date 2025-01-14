@@ -1,0 +1,112 @@
+name: Container Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    tags: ['**']
+    paths:
+    - 'transcribe.py'
+    - 'Dockerfile'
+    - '.dockerignore'
+    - '.github/workflows/container-image.yaml'
+  pull_request:
+    types: [opened, reopened]
+    branches: [main]
+    paths:
+    - 'transcribe.py'
+    - 'Dockerfile'
+    - '.dockerignore'
+    - '.github/workflows/container-image.yaml'
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: image
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        target: [slim, debug]
+    outputs:
+        tags: ${{ steps.matrix.outputs.tags }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Login to Docker Hub
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Login to GitHub Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Quay.io robot account name
+      run: echo "QUAY_ROBOT_NAME=${{ github.repository_owner }}+$(echo ${{ github.event.repository.name }} | tr '-' '_')" >> $GITHUB_ENV # transforms 'emerconn+workout-tracker' to 'emerconn+workout_tracker'
+
+    - name: Login to Quay.io
+      uses: docker/login-action@v3
+      with:
+        registry: quay.io
+        username: ${{ env.QUAY_ROBOT_NAME }}
+        password: ${{ secrets.QUAY_ROBOT_TOKEN }}
+
+    - name: Collect Docker metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        flavor: latest=false
+        images: |
+          ${{ github.repository_owner }}/${{ github.event.repository.name }}
+          ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          quay.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+        tags: |
+          type=raw,value=${{ matrix.target == 'debug' && 'debug' || 'latest' }},enable=${{ github.event_name == 'release' }}
+          type=semver,pattern={{major}}.{{minor}}.{{patch}}${{ matrix.target == 'debug' && '-debug' || '' }}
+          type=semver,pattern={{major}}.{{minor}}${{ matrix.target == 'debug' && '-debug' || '' }}
+          type=semver,pattern={{major}}${{ matrix.target == 'debug' && '-debug' || '' }}
+          type=ref,event=branch,suffix=${{ matrix.target == 'debug' && '-debug' || '' }}
+    - name: Matrix tags
+      id: matrix
+      run: |
+        tags=$(echo '${{ steps.meta.outputs.json }}' | jq -c '.tags | map(select(startswith("ghcr.io")) | split(":")[1])')
+        echo "tags=$tags" >> $GITHUB_OUTPUT
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: amd64
+        # platforms: amd64,arm64
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and publish Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        platforms: linux/amd64
+        # platforms: |
+        #   linux/amd64
+        #   linux/arm64/v8  
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        target: ${{ matrix.target }}
+        cache-to: type=gha,mode=min
+        cache-from: type=gha
