@@ -1,0 +1,14 @@
+services:
+  scribe:
+    image: ghcr.io/emerconn/ten-four-scribe:main
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - .:/work
+    env_file:
+      - .env
