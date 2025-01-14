@@ -39,7 +39,7 @@ class AudioStreamTranscriber:
         
         # Get model size from environment variable (default to "medium" if not set)
         model_size = os.getenv('WHISPER_MODEL_SIZE', 'medium').lower()
-        valid_models = ['tiny', 'base', 'small', 'medium', 'large']
+        valid_models = ['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'turbo']
         if model_size not in valid_models:
             raise ValueError(f"Invalid WHISPER_MODEL_SIZE. Must be one of: {', '.join(valid_models)}")
         
