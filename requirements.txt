@@ -3,4 +3,6 @@ openai-whisper
 pytz
 torch
 ffmpeg-python
+pydub
 numpy
+python-dotenv

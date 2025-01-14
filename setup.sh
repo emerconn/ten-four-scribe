@@ -10,7 +10,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 echo "Installing Python packages..."
-pip install requests openai-whisper pytz torch ffmpeg-python pydub python-dotenv
+pip install requests openai-whisper pytz torch ffmpeg-python pydub python-dotenv numpy
 
 echo "Setup complete!"
 echo "Activate the virtual environment with: source venv/bin/activate"
