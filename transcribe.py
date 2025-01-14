@@ -12,9 +12,22 @@ from threading import Thread
 from queue import Queue
 import gc
 from dotenv import load_dotenv
+import signal
+import sys
+import logging
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('transcriber.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 class AudioStreamTranscriber:
     def __init__(self):
@@ -84,7 +97,7 @@ class AudioStreamTranscriber:
             return np.frombuffer(stdout, dtype=np.float32).copy()
 
         except Exception as e:
-            print(f"[{self.get_formatted_time()}] Decoding error: {e}")
+            logging.error(f"Decoding error: {e}")
             return None
 
     def process_audio_chunk(self, audio_data):
@@ -108,7 +121,7 @@ class AudioStreamTranscriber:
             return None
 
         except Exception as e:
-            print(f"[{self.get_formatted_time()}] Processing error: {e}")
+            logging.error(f"Processing error: {e}")
             return None
         finally:
             # Force garbage collection after processing
@@ -136,14 +149,15 @@ class AudioStreamTranscriber:
                     log_entry = f"[{timestamp}] {transcription}\n"
                     f.write(log_entry)
                     f.flush()  # Ensure immediate write to disk
-                    print(f"[{timestamp}] Successfully wrote transcription to file")
+                    logging.info(f"Successfully wrote transcription to file")
             except Exception as e:
-                print(f"[{self.get_formatted_time()}] Error writing transcription: {e}")
+                logging.error(f"Error writing transcription: {e}")
 
     def stream_and_transcribe(self):
         try:
-            print(f"[{self.get_formatted_time()}] Starting streaming and transcription service")
-            print(f"[{self.get_formatted_time()}] Transcriptions will be saved in: {os.path.abspath('transcribe.txt')}")
+            logging.info("Starting streaming and transcription service")
+            logging.info(f"Stream URL: {self.url}")
+            logging.info(f"Transcriptions will be saved in: {os.path.abspath('transcribe.txt')}")
 
             # Start transcription worker thread
             worker_thread = Thread(target=self.transcription_worker, daemon=True)
@@ -175,34 +189,39 @@ class AudioStreamTranscriber:
                         try:
                             self.audio_queue.put(bytes(buffer), timeout=1)
                         except Exception:
-                            print(f"[{self.get_formatted_time()}] Queue full, skipping chunk")
+                            logging.warning("Queue full, skipping chunk")
 
                         buffer.clear()
 
         except KeyboardInterrupt:
-            print(f"\n[{self.get_formatted_time()}] Stopping stream...")
+            logging.info("\nStopping stream...")
         except Exception as e:
-            print(f"[{self.get_formatted_time()}] Streaming error: {e}")
+            logging.error(f"Streaming error: {e}")
         finally:
             self.running = False
             session.close()
             if 'worker_thread' in locals():
                 worker_thread.join(timeout=5)
 
+def signal_handler(signum, frame):
+    logging.info("Received signal to terminate. Shutting down...")
+    sys.exit(0)
+
 def main():
+    # Register signal handlers
+    signal.signal(signal.SIGTSTP, signal_handler)  # Ctrl+Z
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+
     try:
         transcriber = AudioStreamTranscriber()
-        while True:
-            try:
-                transcriber.stream_and_transcribe()
-            except Exception as e:
-                print(f"[{transcriber.get_formatted_time()}] Error: {e}")
-                print("Restarting stream in 5 seconds...")
-                time.sleep(5)
+        transcriber.stream_and_transcribe()
     except ValueError as e:
-        print(f"Configuration error: {e}")
-        print("Please check your environment variables and try again.")
-        exit(1)
+        logging.error(f"Configuration error: {e}")
+        logging.error("Please check your environment variables and try again.")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

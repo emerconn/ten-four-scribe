@@ -1,3 +1,4 @@
 transcribe.txt
+transcriber.log
 venv/**
 .env
