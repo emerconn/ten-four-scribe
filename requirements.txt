@@ -1,0 +1,6 @@
+requests
+openai-whisper
+pytz
+torch
+ffmpeg-python
+numpy
