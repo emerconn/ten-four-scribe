@@ -5,6 +5,7 @@ on:
     branches: ['**']
     paths:
     - 'transcribe.py'
+    - 'requirements.txt'
     - 'Dockerfile'
     - '.dockerignore'
     - '.github/workflows/container-image.yaml'
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
     - 'transcribe.py'
+    - 'requirements.txt'
     - 'Dockerfile'
     - '.dockerignore'
     - '.github/workflows/container-image.yaml'
