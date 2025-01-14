@@ -1,8 +1,5 @@
-requests
 openai-whisper
-pytz
 torch
-ffmpeg-python
-pydub
-numpy
+requests
 python-dotenv
+pytz
