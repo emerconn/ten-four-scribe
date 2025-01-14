@@ -11,11 +11,22 @@ import ffmpeg
 from threading import Thread
 from queue import Queue
 import gc
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class AudioStreamTranscriber:
-    def __init__(self, stream_url, username, password):
-        self.url = stream_url
-        self.auth = (username, password)
+    def __init__(self):
+        # Load configuration from environment variables
+        self.url = os.getenv('STREAM_URL')
+        self.auth = (
+            os.getenv('STREAM_USERNAME'),
+            os.getenv('STREAM_PASSWORD')
+        )
+        
+        if not all([self.url, self.auth[0], self.auth[1]]):
+            raise ValueError("Missing required environment variables: STREAM_URL, STREAM_USERNAME, or STREAM_PASSWORD")
         
         # Configure torch for optimal performance
         torch._utils._load_global_deps = lambda obj, *args, **kwargs: obj
@@ -25,7 +36,14 @@ class AudioStreamTranscriber:
         
         # Setup device and model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = whisper.load_model("medium", device=self.device)
+        
+        # Get model size from environment variable (default to "medium" if not set)
+        model_size = os.getenv('WHISPER_MODEL_SIZE', 'medium').lower()
+        valid_models = ['tiny', 'base', 'small', 'medium', 'large']
+        if model_size not in valid_models:
+            raise ValueError(f"Invalid WHISPER_MODEL_SIZE. Must be one of: {', '.join(valid_models)}")
+        
+        self.model = whisper.load_model(model_size, device=self.device)
         
         # Setup timezone
         self.timezone = pytz.timezone('America/Chicago')
@@ -115,8 +133,10 @@ class AudioStreamTranscriber:
             timestamp = self.get_formatted_time()
             try:
                 with open("transcribe.txt", "a", encoding='utf-8') as f:
-                    f.write(f"[{timestamp}] {transcription}\n")
+                    log_entry = f"[{timestamp}] {transcription}\n"
+                    f.write(log_entry)
                     f.flush()  # Ensure immediate write to disk
+                    print(f"[{timestamp}] Successfully wrote transcription to file")
             except Exception as e:
                 print(f"[{self.get_formatted_time()}] Error writing transcription: {e}")
 
@@ -170,18 +190,19 @@ class AudioStreamTranscriber:
                 worker_thread.join(timeout=5)
 
 def main():
-    stream_url = "https://audio.broadcastify.com/32602.mp3"
-    username = "emerconn"
-    password = r"|&Ih&_O[8*7BXsIG\CRe"
-
-    while True:
-        try:
-            transcriber = AudioStreamTranscriber(stream_url, username, password)
-            transcriber.stream_and_transcribe()
-        except Exception as e:
-            print(f"[{transcriber.get_formatted_time()}] Error: {e}")
-            print("Restarting stream in 5 seconds...")
-            time.sleep(5)
+    try:
+        transcriber = AudioStreamTranscriber()
+        while True:
+            try:
+                transcriber.stream_and_transcribe()
+            except Exception as e:
+                print(f"[{transcriber.get_formatted_time()}] Error: {e}")
+                print("Restarting stream in 5 seconds...")
+                time.sleep(5)
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        print("Please check your environment variables and try again.")
+        exit(1)
 
 if __name__ == "__main__":
     main()

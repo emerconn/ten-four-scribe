@@ -1,2 +1,3 @@
 transcribe.txt
 venv/**
+.env
