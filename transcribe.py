@@ -71,7 +71,10 @@ class AudioStreamTranscriber:
                 "Missing required environment variables: "
                 "BROADCASTIFY_FEED_ID, BROADCASTIFY_USERNAME, or BROADCASTIFY_PASSWORD"
             )
-        
+
+        # Optional environment variables with defaults
+        self.no_speech_threshold = float(os.getenv('WHISPER_NO_SPEECH_THRESHOLD', '0.6'))
+
         self.url = f"https://audio.broadcastify.com/{self.feed_id}.mp3"
         self.timezone = pytz.timezone('America/Chicago')
         self.buffer_size = self.BYTES_PER_SECOND * self.BUFFER_DURATION
@@ -145,7 +148,7 @@ class AudioStreamTranscriber:
                 language="en",
                 task="transcribe",
                 initial_prompt="This is police and emergency dispatch radio communication.",
-                no_speech_threshold=0.6
+                no_speech_threshold=self.no_speech_threshold
             )
 
             return result["text"]
