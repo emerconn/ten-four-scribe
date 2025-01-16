@@ -2,7 +2,7 @@
 **/.env
 # output files
 **/transcribe.txt
-**/transcriber.log
+**/transcribe.log
 # local python testing
 venv/**
 work/**
