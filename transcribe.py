@@ -32,14 +32,17 @@ logging.basicConfig(
 class AudioStreamTranscriber:
     def __init__(self):
         # Load configuration from environment variables
-        self.url = os.getenv('STREAM_URL')
+        self.feed_id = os.getenv('BROADCASTIFY_FEED_ID')
         self.auth = (
-            os.getenv('STREAM_USERNAME'),
-            os.getenv('STREAM_PASSWORD')
+            os.getenv('BROADCASTIFY_USERNAME'),
+            os.getenv('BROADCASTIFY_PASSWORD')
         )
 
-        if not all([self.url, self.auth[0], self.auth[1]]):
-            raise ValueError("Missing required environment variables: STREAM_URL, STREAM_USERNAME, or STREAM_PASSWORD")
+        # Construct the full URL using the feed ID
+        self.url = f"https://audio.broadcastify.com/{self.feed_id}.mp3"
+
+        if not all([self.feed_id, self.auth[0], self.auth[1]]):
+            raise ValueError("Missing required environment variables: BROADCASTIFY_FEED_ID, BROADCASTIFY_USERNAME, or BROADCASTIFY_PASSWORD")
 
         # Configure torch for optimal performance
         torch._utils._load_global_deps = lambda obj, *args, **kwargs: obj
