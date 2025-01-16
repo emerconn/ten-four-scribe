@@ -1,5 +1,8 @@
-transcribe.txt
-transcriber.log
+# environment files
+**/.env
+# output files
+**/transcribe.txt
+**/transcriber.log
+# local python testing
 venv/**
-.env
 work/**
