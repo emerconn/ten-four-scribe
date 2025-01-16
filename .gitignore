@@ -1,4 +1,6 @@
-# environment files
+# feeds
+**/feeds
+# configs
 **/.env
 # output files
 **/transcribe.txt

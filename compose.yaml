@@ -12,6 +12,7 @@ services:
       - ./feeds/30587_ventura_county_fire/:/work/data
     env_file:
       - ./feeds/30587_ventura_county_fire/.env
+
   32602_indianapolis_metropolitan_police:
     image: ghcr.io/emerconn/ten-four-scribe:main
     deploy:
@@ -25,3 +26,4 @@ services:
       - ./feeds/32602_indianapolis_metropolitan_police/:/work/data
     env_file:
       - ./feeds/32602_indianapolis_metropolitan_police/.env
+
