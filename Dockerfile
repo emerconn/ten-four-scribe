@@ -2,7 +2,6 @@
 FROM nvidia/cuda:12.6.3-base-ubuntu24.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-minimal \
     python3-pip \
@@ -25,9 +24,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Chicago
 ENV PYTHONUNBUFFERED=1
 
-# Install only runtime dependencies
+# Install only runtime dependencies - changed python3-minimal to python3
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3-minimal \
+    python3 \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
