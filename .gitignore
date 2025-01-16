@@ -1,6 +1,7 @@
 # feeds
 **/feeds
 # configs
+feeds.json
 **/.env
 # output files
 **/transcribe.txt

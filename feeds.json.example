@@ -1,0 +1,18 @@
+{
+  "credentials": {
+    "username": "",
+    "password": ""
+  },
+  "feeds": [
+    {
+      "id": "30587",
+      "name": "ventura_county_fire",
+      "model_size": "base.en"
+    },
+    {
+      "id": "32602",
+      "name": "indianapolis_metropolitan_police",
+      "model_size": "base.en"
+    }
+  ]
+}
