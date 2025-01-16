@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 import signal
 import sys
 import logging
-import psutil
 
 # Load environment variables
 load_dotenv()
@@ -84,29 +83,8 @@ class AudioStreamTranscriber:
             'ar': self.sample_rate
         }
 
-        # Memory monitoring settings
-        self.memory_log_interval = 10  # seconds
-        self.last_memory_log = time.time()
-
     def get_formatted_time(self):
         return datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M:%S %Z")
-
-    def log_memory_usage(self):
-        """Log current memory usage of the process"""
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        
-        # Get GPU memory info if available
-        gpu_memory = "N/A"
-        if torch.cuda.is_available():
-            gpu_memory = f"{torch.cuda.memory_allocated() / 1024 / 1024:.2f}"
-        
-        logging.info(
-            f"Memory Usage - "
-            f"RSS: {memory_info.rss / 1024 / 1024:.2f} MB, "
-            f"VMS: {memory_info.vms / 1024 / 1024:.2f} MB, "
-            f"GPU: {gpu_memory} MB"
-        )
 
     def decode_mp3_to_pcm(self, mp3_data):
         try:
@@ -184,10 +162,6 @@ class AudioStreamTranscriber:
             logging.info(f"Stream URL: {self.url}")
             logging.info(f"Transcriptions will be saved in: {os.path.abspath('/work/data/transcribe.txt')}")
 
-            # Log initial memory usage
-            logging.info("Initial memory usage:")
-            self.log_memory_usage()
-
             # Start transcription worker thread
             worker_thread = Thread(target=self.transcription_worker, daemon=True)
             worker_thread.start()
@@ -210,11 +184,6 @@ class AudioStreamTranscriber:
                 if not self.running:
                     break
 
-                current_time = time.time()
-                if current_time - self.last_memory_log >= self.memory_log_interval:
-                    self.log_memory_usage()
-                    self.last_memory_log = current_time
-
                 if chunk:
                     buffer.extend(chunk)
 
@@ -231,7 +200,6 @@ class AudioStreamTranscriber:
             logging.info("\nStopping stream...")
         except Exception as e:
             logging.error(f"Streaming error: {e}")
-            self.log_memory_usage()
         finally:
             self.running = False
             session.close()
