@@ -1,6 +1,6 @@
 # Ten-Four Scribe
 
-Transcribe Broadcastify feeds using an Nvidia GPU and OpenAI Whisper
+Transcribe Broadcastify feeds using an Nvidia CUDA-capable GPU and OpenAI Whisper.
 
 ## How to use
 
