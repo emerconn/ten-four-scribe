@@ -7,3 +7,4 @@ Transcribe Broadcastify feeds using an Nvidia CUDA-capable GPU and OpenAI Whispe
 - Copy & edit `feeds.json` from `feeds.json.example`
 - Run `setup_feeds.sh` to create `compose.yaml` & feed directories
 - Run `docker compose up -d`
+- Stream all transcriptions with `tail_all_feeds.sh`
