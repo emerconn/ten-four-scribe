@@ -24,7 +24,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/work/data/transcriber.log'),
+        logging.FileHandler('/work/data/transcribe.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
