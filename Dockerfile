@@ -1,29 +1,40 @@
+# Build stage
+FROM nvidia/cuda:12.6.3-base-ubuntu24.04 AS builder
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-minimal \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate virtual environment
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Runtime stage
 FROM nvidia/cuda:12.6.3-base-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Chicago
 ENV PYTHONUNBUFFERED=1
 
-# ubuntu stuff
+# Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-minimal \
-    python3-pip \
-    python3-venv \
     ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /root/.cache/pip/*
+    && rm -rf /var/lib/apt/lists/*
 
-# python venv
-ENV VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# python packages
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# go
 WORKDIR /work
 COPY transcribe.py .
 CMD ["python3", "-u", "transcribe.py"]
