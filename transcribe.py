@@ -24,7 +24,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('transcriber.log'),
+        logging.FileHandler('/work/data/transcriber.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -145,7 +145,7 @@ class AudioStreamTranscriber:
         if transcription and transcription.strip():
             timestamp = self.get_formatted_time()
             try:
-                with open("transcribe.txt", "a", encoding='utf-8') as f:
+                with open("/work/data/transcribe.txt", "a", encoding='utf-8') as f:
                     log_entry = f"[{timestamp}] {transcription}\n"
                     f.write(log_entry)
                     f.flush()  # Ensure immediate write to disk
@@ -157,7 +157,7 @@ class AudioStreamTranscriber:
         try:
             logging.info("Starting streaming and transcription service")
             logging.info(f"Stream URL: {self.url}")
-            logging.info(f"Transcriptions will be saved in: {os.path.abspath('transcribe.txt')}")
+            logging.info(f"Transcriptions will be saved in: {os.path.abspath('/work/data/transcribe.txt')}")
 
             # Start transcription worker thread
             worker_thread = Thread(target=self.transcription_worker, daemon=True)

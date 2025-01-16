@@ -1,5 +1,5 @@
 services:
-  scribe:
+  30587_ventura_county_fire:
     image: ghcr.io/emerconn/ten-four-scribe:main
     deploy:
       resources:
@@ -9,6 +9,19 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - .:/work
+      - ./feeds/30587_ventura_county_fire/:/work/data
     env_file:
-      - .env
+      - ./feeds/30587_ventura_county_fire/.env
+  32602_indianapolis_metropolitan_police:
+    image: ghcr.io/emerconn/ten-four-scribe:main
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ./feeds/32602_indianapolis_metropolitan_police/:/work/data
+    env_file:
+      - ./feeds/32602_indianapolis_metropolitan_police/.env
