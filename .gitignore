@@ -1,6 +1,7 @@
 # feeds
 **/feeds
 # configs
+compose.yaml
 feeds.json
 **/.env
 # output files
