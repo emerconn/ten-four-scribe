@@ -2,5 +2,6 @@ ffmpeg-python
 openai-whisper
 torch
 requests
+psutil
 python-dotenv
 pytz
