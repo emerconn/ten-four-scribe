@@ -46,8 +46,9 @@ class AudioStreamTranscriber:
     BYTES_PER_SECOND = 16 * 1024  # 16KB per second for 128kbps MP3
     CHUNK_SIZE = 1024  # Chunk size for reading stream
     QUEUE_SIZE = 3  # Maximum size of processing queue
-    OUTPUT_PATH = "/work/data/transcribe.txt"
-    LOG_PATH = "/work/data/transcribe.log"
+    # Default paths that can be overridden by environment variables
+    OUTPUT_PATH = os.getenv('OUTPUT_PATH', os.path.join(os.getcwd(), 'data', 'transcribe.txt'))
+    LOG_PATH = os.getenv('LOG_PATH', os.path.join(os.getcwd(), 'data', 'transcribe.log'))
 
     def __init__(self):
         """Initialize the transcriber with configuration from environment variables."""
@@ -135,7 +136,7 @@ class AudioStreamTranscriber:
         """Process a chunk of audio data through the Whisper model."""
         try:
             pcm_data = self.decode_mp3_to_pcm(audio_data)
-            if not pcm_data or len(pcm_data) == 0:
+            if pcm_data is None or len(pcm_data) == 0:
                 return None
 
             audio_tensor = torch.from_numpy(pcm_data).to(self.device)
@@ -239,7 +240,11 @@ class AudioStreamTranscriber:
 
 
 def setup_logging():
-    """Configure logging settings."""
+    """Configure logging settings and create necessary directories."""
+    # Create directory for log and output files if it doesn't exist
+    log_dir = os.path.dirname(AudioStreamTranscriber.LOG_PATH)
+    os.makedirs(log_dir, exist_ok=True)
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
