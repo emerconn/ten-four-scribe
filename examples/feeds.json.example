@@ -8,11 +8,13 @@
       "id": "30587",
       "name": "ventura_county_fire",
       "model_size": "base.en"
+      "no_speech_threshold": 0.5
     },
     {
       "id": "32602",
       "name": "indianapolis_metropolitan_police",
       "model_size": "base.en"
+      "no_speech_threshold": 0.5
     }
   ]
 }
