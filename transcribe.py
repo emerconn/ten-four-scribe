@@ -1,92 +1,120 @@
-import requests
-import whisper
-from datetime import datetime
-import time
+"""
+Audio Stream Transcriber
+-----------------------
+A service that streams audio from Broadcastify, processes it using OpenAI's Whisper model,
+and saves transcriptions to a file.
+
+Requirements:
+- See requirements.txt for dependencies
+- Environment variables:
+    BROADCASTIFY_FEED_ID: ID of the Broadcastify feed
+    BROADCASTIFY_USERNAME: Broadcastify username
+    BROADCASTIFY_PASSWORD: Broadcastify password
+    WHISPER_MODEL_SIZE: Size of Whisper model (optional, defaults to 'medium')
+"""
+
 import io
-import os
-import pytz
-import torch
-import numpy as np
-import ffmpeg
-from threading import Thread
-from queue import Queue
 import gc
-from dotenv import load_dotenv
+import logging
+import os
 import signal
 import sys
-import logging
+from datetime import datetime
+from queue import Queue
+from threading import Thread
 
-# Load environment variables
-load_dotenv()
+import ffmpeg
+import numpy as np
+import pytz
+import requests
+import torch
+import whisper
+from dotenv import load_dotenv
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/work/data/transcribe.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+
+class ConfigurationError(Exception):
+    """Raised when there's an issue with the configuration settings."""
+    pass
+
 
 class AudioStreamTranscriber:
+    """Handles streaming audio from Broadcastify and transcribing it using Whisper."""
+    
+    # Constants
+    BUFFER_DURATION = 10  # seconds
+    SAMPLE_RATE = 16000  # Hz (Whisper's expected sample rate)
+    BYTES_PER_SECOND = 16 * 1024  # 16KB per second for 128kbps MP3
+    CHUNK_SIZE = 1024  # Chunk size for reading stream
+    QUEUE_SIZE = 3  # Maximum size of processing queue
+    OUTPUT_PATH = "/work/data/transcribe.txt"
+    LOG_PATH = "/work/data/transcribe.log"
+
     def __init__(self):
-        # Load configuration from environment variables
+        """Initialize the transcriber with configuration from environment variables."""
+        self._load_config()
+        self._setup_torch()
+        self._setup_model()
+        self._setup_processing()
+
+    def _load_config(self):
+        """Load and validate configuration from environment variables."""
+        load_dotenv()
+        
+        # Required environment variables
         self.feed_id = os.getenv('BROADCASTIFY_FEED_ID')
-        self.auth = (
-            os.getenv('BROADCASTIFY_USERNAME'),
-            os.getenv('BROADCASTIFY_PASSWORD')
-        )
-
-        # Construct the full URL using the feed ID
+        self.username = os.getenv('BROADCASTIFY_USERNAME')
+        self.password = os.getenv('BROADCASTIFY_PASSWORD')
+        
+        if not all([self.feed_id, self.username, self.password]):
+            raise ConfigurationError(
+                "Missing required environment variables: "
+                "BROADCASTIFY_FEED_ID, BROADCASTIFY_USERNAME, or BROADCASTIFY_PASSWORD"
+            )
+        
         self.url = f"https://audio.broadcastify.com/{self.feed_id}.mp3"
+        self.timezone = pytz.timezone('America/Chicago')
+        self.buffer_size = self.BYTES_PER_SECOND * self.BUFFER_DURATION
 
-        if not all([self.feed_id, self.auth[0], self.auth[1]]):
-            raise ValueError("Missing required environment variables: BROADCASTIFY_FEED_ID, BROADCASTIFY_USERNAME, or BROADCASTIFY_PASSWORD")
-
-        # Configure torch for optimal performance
+    def _setup_torch(self):
+        """Configure PyTorch settings."""
         torch._utils._load_global_deps = lambda obj, *args, **kwargs: obj
-        torch.set_grad_enabled(False)  # Disable gradient computation
-        if torch.cuda.is_available():
-            torch.backends.cudnn.benchmark = True  # Enable cudnn autotuner
-
-        # Setup device and model
+        torch.set_grad_enabled(False)
+        
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
 
-        # Get model size from environment variable (default to "medium" if not set)
+    def _setup_model(self):
+        """Load and configure the Whisper model."""
         model_size = os.getenv('WHISPER_MODEL_SIZE', 'medium').lower()
-        valid_models = ['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'turbo']
+        valid_models = ['tiny', 'tiny.en', 'base', 'base.en', 'small', 
+                       'small.en', 'medium', 'medium.en', 'large', 'turbo']
+        
         if model_size not in valid_models:
-            raise ValueError(f"Invalid WHISPER_MODEL_SIZE. Must be one of: {', '.join(valid_models)}")
-
+            raise ConfigurationError(
+                f"Invalid WHISPER_MODEL_SIZE. Must be one of: {', '.join(valid_models)}"
+            )
+        
         self.model = whisper.load_model(model_size, device=self.device)
 
-        # Setup timezone
-        self.timezone = pytz.timezone('America/Chicago')
-
-        # Audio settings
-        self.buffer_duration = 10  # seconds
-        self.sample_rate = 16000  # Hz (Whisper's expected sample rate)
-        self.bytes_per_second = 16 * 1024  # 16KB per second for 128kbps MP3
-        self.buffer_size = self.bytes_per_second * self.buffer_duration
-        self.chunk = 1024  # Chunk size for reading stream
-
-        # Setup processing queue
-        self.audio_queue = Queue(maxsize=3)  # Limit queue size to prevent memory bloat
+    def _setup_processing(self):
+        """Set up audio processing configuration."""
+        self.audio_queue = Queue(maxsize=self.QUEUE_SIZE)
         self.running = True
-
-        # Create pre-configured ffmpeg input args
+        
         self.ffmpeg_args = {
             'format': 'f32le',
             'acodec': 'pcm_f32le',
             'ac': 1,
-            'ar': self.sample_rate
+            'ar': self.SAMPLE_RATE
         }
 
     def get_formatted_time(self):
+        """Get current time formatted with timezone."""
         return datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     def decode_mp3_to_pcm(self, mp3_data):
+        """Convert MP3 data to PCM format using ffmpeg."""
         try:
             process = (
                 ffmpeg
@@ -104,36 +132,33 @@ class AudioStreamTranscriber:
             return None
 
     def process_audio_chunk(self, audio_data):
+        """Process a chunk of audio data through the Whisper model."""
         try:
             pcm_data = self.decode_mp3_to_pcm(audio_data)
+            if not pcm_data or len(pcm_data) == 0:
+                return None
 
-            if pcm_data is not None and len(pcm_data) > 0:
-                # Convert to tensor once instead of letting Whisper do it
-                audio_tensor = torch.from_numpy(pcm_data).to(self.device)
+            audio_tensor = torch.from_numpy(pcm_data).to(self.device)
+            result = self.model.transcribe(
+                audio_tensor,
+                language="en",
+                task="transcribe",
+                initial_prompt="This is police and emergency dispatch radio communication.",
+                no_speech_threshold=0.6
+            )
 
-                result = self.model.transcribe(
-                    audio_tensor,
-                    language="en",
-                    task="transcribe",
-                    initial_prompt="This is police and emergency dispatch radio communication.",
-                    no_speech_threshold=0.6  # Adjust this based on your needs
-                )
-
-                return result["text"]
-
-            return None
+            return result["text"]
 
         except Exception as e:
             logging.error(f"Processing error: {e}")
             return None
         finally:
-            # Force garbage collection after processing
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
 
     def transcription_worker(self):
-        """Worker thread for processing audio chunks"""
+        """Worker thread for processing audio chunks from the queue."""
         while self.running:
             try:
                 audio_data = self.audio_queue.get(timeout=1)
@@ -145,86 +170,110 @@ class AudioStreamTranscriber:
                 continue
 
     def write_transcription(self, transcription):
-        if transcription and transcription.strip():
-            timestamp = self.get_formatted_time()
-            try:
-                with open("/work/data/transcribe.txt", "a", encoding='utf-8') as f:
-                    log_entry = f"[{timestamp}] {transcription}\n"
-                    f.write(log_entry)
-                    f.flush()  # Ensure immediate write to disk
-                    logging.info(f"Successfully wrote transcription to file")
-            except Exception as e:
-                logging.error(f"Error writing transcription: {e}")
+        """Write transcription to file with timestamp."""
+        if not transcription or not transcription.strip():
+            return
+
+        timestamp = self.get_formatted_time()
+        try:
+            with open(self.OUTPUT_PATH, "a", encoding='utf-8') as f:
+                log_entry = f"[{timestamp}] {transcription}\n"
+                f.write(log_entry)
+                f.flush()
+            logging.info("Successfully wrote transcription to file")
+        except Exception as e:
+            logging.error(f"Error writing transcription: {e}")
 
     def stream_and_transcribe(self):
+        """Main method to stream audio and process it for transcription."""
         try:
             logging.info("Starting streaming and transcription service")
             logging.info(f"Stream URL: {self.url}")
-            logging.info(f"Transcriptions will be saved in: {os.path.abspath('/work/data/transcribe.txt')}")
+            logging.info(f"Transcriptions will be saved in: {os.path.abspath(self.OUTPUT_PATH)}")
 
-            # Start transcription worker thread
             worker_thread = Thread(target=self.transcription_worker, daemon=True)
             worker_thread.start()
 
-            # Start streaming with authentication and larger timeout
             session = requests.Session()
             response = session.get(
                 self.url,
-                auth=self.auth,
+                auth=(self.username, self.password),
                 stream=True,
                 timeout=30
             )
 
             if response.status_code != 200:
-                raise Exception(f"Failed to connect to stream. Status code: {response.status_code}")
+                raise ConnectionError(f"Failed to connect to stream. Status code: {response.status_code}")
 
-            buffer = bytearray()
-
-            for chunk in response.iter_content(chunk_size=self.chunk):
-                if not self.running:
-                    break
-
-                if chunk:
-                    buffer.extend(chunk)
-
-                    if len(buffer) >= self.buffer_size:
-                        # Add to processing queue if there's room
-                        try:
-                            self.audio_queue.put(bytes(buffer), timeout=1)
-                        except Exception:
-                            logging.warning("Queue full, skipping chunk")
-
-                        buffer.clear()
+            self._process_stream(response)
 
         except KeyboardInterrupt:
             logging.info("\nStopping stream...")
         except Exception as e:
             logging.error(f"Streaming error: {e}")
         finally:
-            self.running = False
-            session.close()
-            if 'worker_thread' in locals():
-                worker_thread.join(timeout=5)
+            self._cleanup(session, worker_thread if 'worker_thread' in locals() else None)
+
+    def _process_stream(self, response):
+        """Process the audio stream in chunks."""
+        buffer = bytearray()
+        for chunk in response.iter_content(chunk_size=self.CHUNK_SIZE):
+            if not self.running:
+                break
+
+            if chunk:
+                buffer.extend(chunk)
+                if len(buffer) >= self.buffer_size:
+                    try:
+                        self.audio_queue.put(bytes(buffer), timeout=1)
+                    except Exception:
+                        logging.warning("Queue full, skipping chunk")
+                    buffer.clear()
+
+    def _cleanup(self, session, worker_thread):
+        """Clean up resources when stopping the service."""
+        self.running = False
+        session.close()
+        if worker_thread:
+            worker_thread.join(timeout=5)
+
+
+def setup_logging():
+    """Configure logging settings."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(AudioStreamTranscriber.LOG_PATH),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
 
 def signal_handler(signum, frame):
+    """Handle termination signals."""
     logging.info("Received signal to terminate. Shutting down...")
     sys.exit(0)
 
+
 def main():
-    # Register signal handlers
+    """Main entry point for the application."""
     signal.signal(signal.SIGTSTP, signal_handler)  # Ctrl+Z
     signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    
+    setup_logging()
 
     try:
         transcriber = AudioStreamTranscriber()
         transcriber.stream_and_transcribe()
-    except ValueError as e:
+    except ConfigurationError as e:
         logging.error(f"Configuration error: {e}")
         logging.error("Please check your environment variables and try again.")
         sys.exit(1)
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
