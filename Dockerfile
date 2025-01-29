@@ -1,5 +1,5 @@
 # Build stage
-FROM nvidia/cuda:12.6.3-base-ubuntu24.04 AS builder
+FROM nvidia/cuda:12.8.0-base-ubuntu24.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Runtime stage
-FROM nvidia/cuda:12.6.3-base-ubuntu24.04
+FROM nvidia/cuda:12.8.0-base-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=America/Chicago
 ENV PYTHONUNBUFFERED=1
