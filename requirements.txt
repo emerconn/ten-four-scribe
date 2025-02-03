@@ -33,7 +33,7 @@ pytz==2025.1
 regex==2024.11.6
 requests==2.32.3
 setuptools==75.8.0
-sympy==1.13.1
+sympy==1.13.3
 tiktoken==0.8.0
 torch==2.6.0
 tqdm==4.67.1
