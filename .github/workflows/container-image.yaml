@@ -9,6 +9,7 @@ on:
     - 'Dockerfile'
     - '.dockerignore'
     - '.github/workflows/container-image.yaml'
+    if: github.event_name != 'pull_request'
   pull_request:
     types: [opened, reopened]
     branches: [main]
