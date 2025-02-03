@@ -3,8 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches: ['**']
-    branches-ignore:
-      - 'refs/pull/**'
     paths:
     - 'transcribe.py'
     - 'requirements.txt'
@@ -25,6 +23,7 @@ on:
 
 jobs:
   build-and-publish:
+    if: github.event_name != 'pull_request' && github.event.pull_request == null
     runs-on: ubuntu-24.04
     environment:
       name: image
