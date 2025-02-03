@@ -7,8 +7,9 @@ fi
 # Get global credentials
 username=$(jq -r '.credentials.username' feeds.json)
 password=$(jq -r '.credentials.password' feeds.json)
-# Create feeds directory if it doesn't exist
-mkdir -p feeds
+# Refresh feeds directory
+rm -rf feeds
+mkdir feeds
 # Start compose.yaml with services header
 echo "services:" > compose.yaml
 # Process each feed
