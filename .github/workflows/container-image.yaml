@@ -3,13 +3,14 @@ on:
   workflow_dispatch:
   push:
     branches: ['**']
+    branches-ignore:
+      - 'refs/pull/**'
     paths:
     - 'transcribe.py'
     - 'requirements.txt'
     - 'Dockerfile'
     - '.dockerignore'
     - '.github/workflows/container-image.yaml'
-    if: github.event_name != 'pull_request'
   pull_request:
     types: [opened, reopened]
     branches: [main]
