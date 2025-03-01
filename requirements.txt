@@ -32,7 +32,7 @@ python-dotenv==1.0.1
 pytz==2025.1
 regex==2024.11.6
 requests==2.32.3
-setuptools==75.8.0
+setuptools==75.8.2
 sympy==1.13.1
 tiktoken==0.8.0
 torch==2.6.0
